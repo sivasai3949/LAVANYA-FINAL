@@ -2,7 +2,6 @@ from flask import Flask, render_template, request, session, jsonify
 import openai
 from dotenv import load_dotenv
 import os
-import time
 
 app = Flask(__name__)
 
@@ -36,17 +35,20 @@ def home():
 @app.route('/process_chat', methods=['POST'])
 def process_chat():
     user_input = request.form.get('user_input')
+    
     if user_input:
         question_index = session.get('question_index', 0)
+        
         if question_index < len(questions):
             session['user_responses'].append(user_input)
             question_index += 1
             session['question_index'] = question_index
+            
             if question_index < len(questions):
                 return jsonify({'response': questions[question_index]})
             else:
-                options_html = render_template('options.html', options=options)
-                return options_html
+                return jsonify({'options': options})
+        
         else:
             try:
                 bot_response = get_ai_response(user_input)
@@ -56,12 +58,14 @@ def process_chat():
             except openai.error.OpenAIError as e:
                 app.logger.error(f"OpenAI API error: {str(e)}")
                 return jsonify({'error': 'Sorry, something went wrong with the AI service. Please try again later.'}), 500
+    
     return jsonify({'error': 'Invalid input'}), 400
 
 def get_ai_response(input_text):
     messages = [
         {"role": "system", "content": "You are a helpful assistant."}
     ]
+    
     for response in session.get('user_responses', []):
         messages.append({"role": "user", "content": response})
     
@@ -73,6 +77,7 @@ def get_ai_response(input_text):
             messages=messages
         )
         return completion.choices[0].message['content']
+    
     except openai.error.RateLimitError as e:
         raise  # Let the Flask handler catch this and return a proper response
     except openai.error.OpenAIError as e:
